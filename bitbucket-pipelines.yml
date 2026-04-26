@@ -1,0 +1,62 @@
+pipelines:
+  default:
+    - step:
+        name: Full Migration + Auto Sync (Combined)
+        image: alpine/git:2.43.0
+
+        clone:
+          enabled: false
+
+        script:
+          - set -euo pipefail
+
+          - echo "🚀 Starting Migration + Sync..."
+
+          # Variables
+          - export WORKSPACE="<your-workspace>"
+          - export REPO_NAME="ecommerce_app"
+          - export GITHUB_USER="prashantkpowar240"
+          - export TARGET_REPO="ecommerce_App"
+
+          # Cleanup
+          - rm -rf ${REPO_NAME}.git || true
+
+          # -------------------------------
+          # STEP 1: FULL MIRROR MIGRATION
+          # -------------------------------
+          - echo "🔁 Performing mirror migration..."
+
+          - git clone --mirror https://x-token-auth:${BITBUCKET_VARIABLE}@bitbucket.org/${WORKSPACE}/${REPO_NAME}.git
+          - cd ${REPO_NAME}.git
+
+          # Push full mirror (all refs)
+          - git push --mirror https://x-access-token:${GITHUB_VARIABLE}@github.com/${GITHUB_USER}/${TARGET_REPO}.git
+
+          - echo "✅ Mirror migration done"
+
+          - cd ..
+
+          # -------------------------------
+          # STEP 2: INCREMENTAL SYNC (SYNCUP)
+          # -------------------------------
+          - echo "🔄 Performing incremental sync..."
+
+          - git clone https://x-token-auth:${BITBUCKET_VARIABLE}@bitbucket.org/${WORKSPACE}/${REPO_NAME}.git app
+
+          - cd app
+
+          # Add GitHub remote
+          - git remote add github https://x-access-token:${GITHUB_VARIABLE}@github.com/${GITHUB_USER}/${TARGET_REPO}.git || true
+
+          # Push updates
+          - git push --all github
+          - git push --tags github
+
+          # -------------------------------
+          # STEP 3: VALIDATION
+          # -------------------------------
+          - echo "🔍 Validating sync..."
+
+          - git ls-remote github
+
+          - echo "🎉 Migration + Sync completed successfully"
