@@ -1,0 +1,163 @@
+========================================
+CAR SERVICE API - ECOMMERCE APP
+========================================
+
+Base URL:
+http://<domain>/api/v1/car-service
+
+Content-Type:
+application/json
+
+========================================
+1. CREATE CAR SERVICE REQUEST
+========================================
+POST /services
+
+Request Body:
+{
+  "user_id": "string",
+  "car_model": "string",
+  "car_number": "string",
+  "service_type": "string",   // e.g., oil_change, repair, full_service
+  "pickup_address": "string",
+  "service_date": "YYYY-MM-DD",
+  "notes": "string"
+}
+
+Response:
+201 Created
+{
+  "service_id": "string",
+  "status": "BOOKED",
+  "message": "Service request created successfully"
+}
+
+========================================
+2. GET ALL SERVICES (ADMIN)
+========================================
+GET /services
+
+Response:
+200 OK
+[
+  {
+    "service_id": "string",
+    "user_id": "string",
+    "car_model": "string",
+    "service_type": "string",
+    "status": "BOOKED | IN_PROGRESS | COMPLETED",
+    "service_date": "YYYY-MM-DD"
+  }
+]
+
+========================================
+3. GET USER SERVICES
+========================================
+GET /services/user/{user_id}
+
+Response:
+200 OK
+[
+  {
+    "service_id": "string",
+    "car_model": "string",
+    "service_type": "string",
+    "status": "string",
+    "service_date": "YYYY-MM-DD"
+  }
+]
+
+========================================
+4. GET SERVICE BY ID
+========================================
+GET /services/{service_id}
+
+Response:
+200 OK
+{
+  "service_id": "string",
+  "user_id": "string",
+  "car_model": "string",
+  "car_number": "string",
+  "service_type": "string",
+  "status": "string",
+  "pickup_address": "string",
+  "service_date": "YYYY-MM-DD",
+  "notes": "string"
+}
+
+========================================
+5. UPDATE SERVICE STATUS (ADMIN)
+========================================
+PUT /services/{service_id}/status
+
+Request Body:
+{
+  "status": "IN_PROGRESS | COMPLETED | CANCELLED"
+}
+
+Response:
+200 OK
+{
+  "message": "Service status updated successfully"
+}
+
+========================================
+6. CANCEL SERVICE
+========================================
+DELETE /services/{service_id}
+
+Response:
+200 OK
+{
+  "message": "Service cancelled successfully"
+}
+
+========================================
+7. SERVICE TYPES (STATIC / CONFIG)
+========================================
+GET /service-types
+
+Response:
+200 OK
+[
+  "oil_change",
+  "car_wash",
+  "repair",
+  "full_service"
+]
+
+========================================
+ERROR RESPONSES
+========================================
+
+400 Bad Request
+{
+  "error": "Invalid request data"
+}
+
+404 Not Found
+{
+  "error": "Service not found"
+}
+
+500 Internal Server Error
+{
+  "error": "Something went wrong"
+}
+
+========================================
+AUTHENTICATION
+========================================
+Header:
+Authorization: Bearer <JWT_TOKEN>
+
+========================================
+NOTES
+========================================
+- All timestamps should be in ISO format.
+- Status flow: BOOKED → IN_PROGRESS → COMPLETED
+- Only admins can update service status.
+- Users can only access their own service records.
+
+========================================
