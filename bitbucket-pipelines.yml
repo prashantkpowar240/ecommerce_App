@@ -90,7 +90,7 @@ pipelines:
           - git clone --depth 1 "$GH_URL" gh_dst
 
           - |
-            FILE_DIFF=$(diff -rq bb_src gh_dst || true)
+            FILE_DIFF=$(diff -rq bb_src gh_dst --exclude=.git || true)
 
             if [ -z "$FILE_DIFF" ]; then
               echo "✅ FILES MATCH"
