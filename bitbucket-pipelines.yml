@@ -1,7 +1,7 @@
 pipelines:
   default:
     - step:
-        name: Full Migration + Auto Sync (Combined)
+        name: Full Migration + Sync + Audit
         image: alpine/git:2.43.0
 
         clone:
@@ -10,35 +10,35 @@ pipelines:
         script:
           - set -euo pipefail
 
-          - echo "🚀 Starting Migration + Sync..."
+          - echo "🚀 Starting Migration + Sync + Audit..."
 
           # ===============================
-          # VARIABLES (FIXED)
+          # VARIABLES
           # ===============================
           - export WORKSPACE="prashantkpowar"
-          - export REPO_NAME="ecommerce_App"   # ✅ FIXED (case-sensitive)
+          - export REPO_NAME="ecommerce_App"
           - export GITHUB_USER="prashantkpowar240"
           - export TARGET_REPO="ecommerce_App"
+
+          - export BB_URL="https://x-token-auth:${BITBUCKET_VARIABLE}@bitbucket.org/${WORKSPACE}/${REPO_NAME}.git"
+          - export GH_URL="https://x-access-token:${GITHUB_VARIABLE}@github.com/${GITHUB_USER}/${TARGET_REPO}.git"
 
           # ===============================
           # CLEANUP
           # ===============================
-          - rm -rf ${REPO_NAME}.git app || true
+          - rm -rf ${REPO_NAME}.git app bb_refs.txt gh_refs.txt bb_src gh_dst diff.txt || true
 
           # ===============================
           # STEP 1: MIRROR MIGRATION
           # ===============================
           - echo "🔁 Performing mirror migration..."
 
-          - git clone --mirror https://x-token-auth:${BITBUCKET_VARIABLE}@bitbucket.org/${WORKSPACE}/${REPO_NAME}.git
-
+          - git clone --mirror "$BB_URL"
           - cd ${REPO_NAME}.git
 
-          # Push mirror (retry once if fails)
-          - git push --mirror https://x-access-token:${GITHUB_VARIABLE}@github.com/${GITHUB_USER}/${TARGET_REPO}.git || git push --mirror https://x-access-token:${GITHUB_VARIABLE}@github.com/${GITHUB_USER}/${TARGET_REPO}.git
+          - git push --mirror "$GH_URL" || git push --mirror "$GH_URL"
 
           - echo "✅ Mirror migration done"
-
           - cd ..
 
           # ===============================
@@ -46,22 +46,99 @@ pipelines:
           # ===============================
           - echo "🔄 Performing incremental sync..."
 
-          - git clone https://x-token-auth:${BITBUCKET_VARIABLE}@bitbucket.org/${WORKSPACE}/${REPO_NAME}.git app
-
+          - git clone "$BB_URL" app
           - cd app
 
-          # Add GitHub remote safely
-          - git remote add github https://x-access-token:${GITHUB_VARIABLE}@github.com/${GITHUB_USER}/${TARGET_REPO}.git || true
+          - git remote add github "$GH_URL" || true
 
-          # Push updates (retry included)
           - git push --all github || git push --all github
           - git push --tags github || git push --tags github
 
-          # ===============================
-          # STEP 3: VALIDATION
-          # ===============================
-          - echo "🔍 Validating sync..."
+          - cd ..
 
-          - git ls-remote github
+          # ===============================
+          # STEP 3: SHA VALIDATION (RETRY)
+          # ===============================
+          - echo "🔍 Validating refs (SHA match)..."
 
-          - echo "🎉 Migration + Sync completed successfully"
+          - |
+            for i in 1 2 3; do
+              git ls-remote "$BB_URL" | grep -v "refs/pull" | sort > bb_refs.txt
+              git ls-remote "$GH_URL" | grep -v "refs/pull" | sort > gh_refs.txt
+
+              if diff bb_refs.txt gh_refs.txt > diff.txt; then
+                echo "✅ SHA VALIDATION PASSED"
+                break
+              else
+                echo "⚠️ Attempt $i failed - retrying in 5s..."
+                sleep 5
+              fi
+
+              if [ "$i" -eq 3 ]; then
+                echo "❌ SHA VALIDATION FAILED"
+                cat diff.txt
+                exit 1
+              fi
+            done
+
+          # ===============================
+          # STEP 4: FILE INTEGRITY CHECK
+          # ===============================
+          - echo "📁 Checking file integrity..."
+
+          - git clone --depth 1 "$BB_URL" bb_src
+          - git clone --depth 1 "$GH_URL" gh_dst
+
+          - |
+            FILE_DIFF=$(diff -rq bb_src gh_dst || true)
+
+            if [ -z "$FILE_DIFF" ]; then
+              echo "✅ FILES MATCH"
+            else
+              echo "❌ FILE MISMATCH DETECTED"
+              echo "$FILE_DIFF"
+              exit 1
+            fi
+
+          # ===============================
+          # STEP 5: DEPENDENCY CHECK
+          # ===============================
+          - echo "🔗 Checking for Bitbucket dependencies..."
+
+          - |
+            BITBUCKET_REFS=$(grep -r "bitbucket.org" gh_dst || true)
+
+            if [ -z "$BITBUCKET_REFS" ]; then
+              echo "✅ No Bitbucket references found"
+            else
+              echo "⚠️ Bitbucket references still present:"
+              echo "$BITBUCKET_REFS"
+            fi
+
+          # ===============================
+          # STEP 6: CI/CD CHECK
+          # ===============================
+          - echo "⚙️ Checking CI/CD..."
+
+          - |
+            if [ -d "gh_dst/.github/workflows" ]; then
+              echo "✅ GitHub Actions workflows found"
+            else
+              echo "⚠️ No GitHub Actions workflows found"
+            fi
+
+            if [ -f "gh_dst/bitbucket-pipelines.yml" ]; then
+              echo "⚠️ Bitbucket pipeline config still exists"
+            fi
+
+          # ===============================
+          # STEP 7: GIT INTEGRITY
+          # ===============================
+          - echo "🔍 Running git fsck..."
+
+          - git --git-dir=${REPO_NAME}.git fsck && echo "✅ Git integrity OK" || { echo "❌ Git corruption detected"; exit 1; }
+
+          # ===============================
+          # FINAL
+          # ===============================
+          - echo "🎉 Migration + Sync + FULL AUDIT completed successfully"
