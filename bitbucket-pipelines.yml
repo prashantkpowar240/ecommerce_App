@@ -26,7 +26,7 @@ pipelines:
           # ===============================
           # CLEANUP
           # ===============================
-          - rm -rf ${REPO_NAME}.git app bb_refs.txt gh_refs.txt bb_src gh_dst diff.txt || true
+          - rm -rf ${REPO_NAME}.git app bb_refs.txt gh_refs.txt bb_src gh_dst bb_files.txt gh_files.txt || true
 
           # ===============================
           # STEP 1: MIRROR MIGRATION
@@ -82,21 +82,25 @@ pipelines:
             done
 
           # ===============================
-          # STEP 4: FILE INTEGRITY CHECK
+          # STEP 4: FILE INTEGRITY (FIXED)
           # ===============================
-          - echo "📁 Checking file integrity..."
+          - echo "📁 Checking file integrity (checksum-based)..."
 
           - git clone --depth 1 "$BB_URL" bb_src
           - git clone --depth 1 "$GH_URL" gh_dst
 
           - |
-            FILE_DIFF=$(diff -rq bb_src gh_dst --exclude=.git || true)
+            cd bb_src
+            find . -type f ! -path "*/.git/*" -exec sha1sum {} \; | sort > ../bb_files.txt
+            cd ../gh_dst
+            find . -type f ! -path "*/.git/*" -exec sha1sum {} \; | sort > ../gh_files.txt
+            cd ..
 
-            if [ -z "$FILE_DIFF" ]; then
-              echo "✅ FILES MATCH"
+            if diff bb_files.txt gh_files.txt > file_diff.txt; then
+              echo "✅ FILES MATCH (checksum verified)"
             else
               echo "❌ FILE MISMATCH DETECTED"
-              echo "$FILE_DIFF"
+              cat file_diff.txt
               exit 1
             fi
 
